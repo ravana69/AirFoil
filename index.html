@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from wyattflanders.com/AirFoil/ by HTTrack Website Copier/3.x [XR&CO'2014], Tue, 29 Nov 2022 08:02:55 GMT -->
+<head>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>Fluid</title>
+	</head>
+<body>
+	Width<input type="number" value="500" id="width">
+	Height<input type="number" value="200" id="height">
+	Iterations/Frame<input type="number" value="16" id="iters"><br>
+	Angle<input type="number" value="-20" id="angle">
+	Velocity<input type="number" value=".2" step=".1" id="velocity"><br>
+	<button id="reset">Reset</button>
+	<button id="download">Download</button><br>
+	<canvas id="canvas"></canvas>
+	<div id="shaders">
+		<script type="x-shader" id="vs">
+			attribute vec2 av;
+			void main () {gl_Position = vec4(av*2.-1., 0., 1.);}
+		</script>
+		<script type="x-shader" id="fs">
+			#ifdef GL_FRAGMENT_PRECISION_HIGH
+				precision highp float;
+			#else
+				precision mediump float;
+			#endif
+			#define Q gl_FragColor
+			#define U gl_FragCoord.xy
+			uniform vec2 R;
+			uniform sampler2D V;
+			uniform float I;
+			uniform float angle;
+			float line (vec2 p, vec2 a, vec2 b) {
+			    return length(p-a-(b-a)*clamp(dot(p-a,b-a)/dot(b-a,b-a),0.,1.));
+			}
+			void main () {
+				vec2 a = vec2(0.15,0.5)*R, b = a+50.*vec2(cos(angle*0.01745329251),sin(0.01745329251*angle));
+				float foil = smoothstep(3.,2.,line(U,a,b));
+				vec4 v = texture2D(V,U/R);
+				Q = abs(sin((1.+vec4(1,2,3,4))*(v.z+foil)+1.*v.z+2.*v.w));
+				Q.w = 1.;
+			}
+		</script>
+		<script type="x-shader" id="simP">
+			#ifdef GL_FRAGMENT_PRECISION_HIGH
+				precision highp float;
+			#else
+				precision mediump float;
+			#endif
+			#define Q gl_FragColor
+			#define U gl_FragCoord.xy
+			uniform vec2 R;
+			uniform sampler2D V;
+			uniform sampler2D T;
+			uniform float I;
+			uniform vec4 mouse;
+			uniform float angle;
+			uniform float velocity;
+			vec4 C (vec2 u) {
+				return texture2D(T,u/R);
+			}
+			vec4 A (vec2 u) {
+				return texture2D(V,u/R);
+			}
+			vec4 Aa (vec2 u) {
+				u -= 0.25*C(u).xy;
+				u -= 0.25*C(u).xy;
+				u -= 0.25*C(u).xy;
+				u -= 0.25*C(u).xy;
+				return A(u);
+			}
+			float line (vec2 p, vec2 a, vec2 b) {
+			    return length(p-a-(b-a)*clamp(dot(p-a,b-a)/dot(b-a,b-a),0.,1.));
+			}
+			void main () {
+				Q = Aa(U);
+				vec4 
+					n = Aa(U+vec2(0,1)),
+					e = Aa(U+vec2(1,0)),
+					s = Aa(U-vec2(0,1)),
+					w = Aa(U-vec2(1,0));
+				Q.z -= 0.25*(e.x-w.x+n.y-s.y);
+				
+				if (mod(I,16.)>0.) Q.w = A(U).w;
+				else {
+					vec2 u = U;
+					u -= C(u).xy;
+					u -= C(u).xy;
+					u -= C(u).xy;
+					u -= C(u).xy;
+					u -= C(u).xy;
+					u -= C(u).xy;
+					u -= C(u).xy;
+					u -= C(u).xy;
+					
+					u -= C(u).xy;
+					u -= C(u).xy;
+					u -= C(u).xy;
+					u -= C(u).xy;
+					u -= C(u).xy;
+					u -= C(u).xy;
+					u -= C(u).xy;
+					u -= C(u).xy;
+					Q.w = A(u).w;
+				}
+
+				Q.xyw = mix(Q.xyw,vec3(3.*(mouse.xy-mouse.zw)/R.x,1),smoothstep(3.,2.,line(U,mouse.xy,mouse.zw)));
+
+				vec2 a = vec2(0.15,0.5)*R, b = a+50.*vec2(cos(angle*0.01745329251),sin(0.01745329251*angle));
+				float foil = smoothstep(2.,3.,line(U,a,b));
+				Q.xy *= foil;
+				Q.w = mix(1.,Q.w,foil);
+				if (U.x<2.||R.x-U.x<2.)Q=vec4(velocity,0,0,0);
+				if (U.y<2.||R.y-U.y<2.)Q *= 0.;
+				
+				if (I<1.) Q = vec4(velocity,0,0,0);
+			}
+		</script>
+		<script type="x-shader" id="simV">
+			#ifdef GL_FRAGMENT_PRECISION_HIGH
+				precision highp float;
+			#else
+				precision mediump float;
+			#endif
+			#define Q gl_FragColor
+			#define U gl_FragCoord.xy
+			uniform vec2 R;
+			uniform sampler2D V;
+			uniform float I;
+			vec4 A (vec2 u) {
+				return texture2D(V,u/R);
+			}
+			void main () {
+				Q = A(U);
+				vec4 
+					n = A(U+vec2(0,1)),
+					e = A(U+vec2(1,0)),
+					s = A(U-vec2(0,1)),
+					w = A(U-vec2(1,0));
+				Q.xy -= 0.25*vec2(e.z-w.z,n.z-s.z);
+			}
+		</script>
+		<script type="x-shader" id="adve">
+			#ifdef GL_FRAGMENT_PRECISION_HIGH
+				precision highp float;
+			#else
+				precision mediump float;
+			#endif
+			#define Q gl_FragColor
+			#define U gl_FragCoord.xy
+			uniform vec2 R;
+			uniform sampler2D V;
+			uniform float I;
+			uniform vec4 mouse;
+			vec4 A (vec2 u) {
+				return texture2D(V,u/R);
+			}
+			void main () {
+				vec4 
+					N = A(U+vec2(0,1)),
+					E = A(U+vec2(1,0)),
+					S = A(U-vec2(0,1)),
+					W = A(U-vec2(1,0));
+				Q = 0.25*(N+E+S+W);
+			}
+		</script>
+	</div>
+	<script id="gl-utilities">
+
+			class Framebuffer {
+	            constructor(gl, n, type, w, h = w, filter = 'LINEAR') {
+	                this.gl = gl;
+	                this.type = type;
+	                this.n = n;
+	                this.w = w;
+	                this.h = h;
+	                this.width = w;
+	                this.height = h;
+	                this.fb0 = gl.createFramebuffer();
+	                this.renderbuffer = gl.createRenderbuffer();
+	                this.texture = gl.createTexture();
+	                gl.activeTexture(gl['TEXTURE' + this.n]);
+	                gl.bindFramebuffer(gl.FRAMEBUFFER, this.fb0);
+	                gl.bindTexture(gl.TEXTURE_2D, this.texture);
+	                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl[filter]);
+	                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl[filter]);
+	                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, this.type, null);
+	                gl.bindRenderbuffer(gl.RENDERBUFFER, this.renderbuffer);
+	                gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, w, h);
+	                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.texture, 0);
+	                gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.renderbuffer);
+	            }
+	            read() {
+	            	this.route();
+	            	var pixels = new Float32Array(this.w * this.h * 4);
+					this.gl.readPixels(0, 0, this.w, this.h, this.gl.RGBA, this.type, pixels);
+					return pixels;
+	            }
+	            write(typedArray) {
+	                this.gl.activeTexture(this.gl["TEXTURE" + this.n]);
+	                this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.w, this.h, 0, this.gl.RGBA, this.type, typedArray);
+	            }
+	            source(element) {
+	                this.gl.activeTexture(this.gl["TEXTURE" + this.n]);
+	                this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
+	                this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, element);
+	                this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
+	            }
+	            route() {
+	                this.gl.activeTexture(this.gl["TEXTURE" + this.n]);
+	                this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture);
+	                this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.fb0);
+	                this.gl.viewport(0, 0, this.w, this.h);
+	            }
+	        }
+
+	        const createProgram = (gl, vstr, fstr) => {
+	            vstr = vstr.length < 20 && document.getElementById(vstr) ? document.getElementById(vstr).textContent : vstr
+	            fstr = fstr.length < 20 && document.getElementById(fstr) ? document.getElementById(fstr).textContent : fstr
+
+	            let program = gl.createProgram()
+	            let vshader = createShader(gl, vstr, gl.VERTEX_SHADER)
+	            let fshader = createShader(gl, fstr, gl.FRAGMENT_SHADER)
+
+	            gl.attachShader(program, vshader)
+	            gl.attachShader(program, fshader)
+	            gl.linkProgram(program);
+
+	            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+	                throw gl.getProgramInfoLog(program);
+	            }
+	            return program;
+	        }
+
+	        const createShader = (gl, str, type) => {
+	            let shader = gl.createShader(type)
+	            gl.shaderSource(shader, str)
+	            gl.compileShader(shader)
+
+	            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+	            	var errorString = gl.getShaderInfoLog(shader);
+	                alert(errorString + str.split('\n')[errorString.split(':')[2]-1]);
+	                throw gl.getShaderInfoLog(shader);
+	            }
+
+	            return shader;
+	        }
+
+	        const initAttrib = (gl, program) => {
+	            gl.useProgram(program);
+	            let attrib = gl.getAttribLocation(program, 'av');
+	            gl.enableVertexAttribArray(attrib);
+	            gl.vertexAttribPointer(attrib, 2, gl.FLOAT, gl.FALSE, 0, 0);
+	            return program;
+	        }
+
+	        const setUni = (gl, program, name, args, int = false) => {
+	            gl.useProgram(program);
+	            if (!program[name]) program[name] = gl.getUniformLocation(program, name);
+	            if (int || typeof (args) == "boolean") gl.uniform1i(program[name], args);
+	            else if (args.constructor == Array) gl["uniform" + args.length + "fv"](program[name], args);
+	            else if (typeof (args) == "number") gl.uniform1f(program[name], args);
+	            else if (args.constructor == Framebuffer) gl.uniform1i(program[name], args.n);
+	            return setUni;
+	        }
+
+	        const draw = (gl, program, dest, clear = false, type = gl.TRIANGLES, a = 0, b = 6) => {
+	            gl.useProgram(program);
+	            if (dest.route == undefined) {
+	            	gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	                gl.viewport(0, 0, dest.width, dest.height);
+	            } else dest.route();
+	            if (clear) gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	            gl.drawArrays(type, a, b);
+	        }
+
+	        const initVerts = (gl, w = 0, h = w) => {
+	            let arr = new Float32Array(w * h * 2 + 12), sqr = [0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1], i = 0;
+	            for (j = 0; j < 12; j++) arr[i++] = sqr[j];
+	            for (let y = 0; y < h; y++) {
+	                for (let x = 0; x < w; x++) {
+	                    arr[i++] = x / w;
+	                    arr[i++] = y / h;
+	                }
+	            }
+	            let buffer = gl.createBuffer();
+	            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+	            gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW);
+	            return arr;
+	        }
+	</script>
+	<script type="text/javascript">
+		var canvas = document.getElementById("canvas"),
+			gl = canvas.getContext("webgl"),
+			ext = gl.getExtension('OES_texture_float'),
+			lin = gl.getExtension('OES_texture_float_linear'),
+			fbo_V = new Framebuffer(gl, 0, gl.FLOAT, canvas.width, canvas.height),
+			fbo_P = new Framebuffer(gl, 1, gl.FLOAT, canvas.width, canvas.height),
+			fbo_A = new Framebuffer(gl, 2, gl.FLOAT, canvas.width, canvas.height),
+			sim_V = createProgram (gl, "vs", "simV"),
+			sim_P = createProgram (gl, "vs", "simP"),
+			sim_A = createProgram (gl, "vs", "adve"),
+			program = createProgram (gl, "vs", "fs"),
+			width = document.getElementById("width"),
+			height = document.getElementById("height"),
+			iters = document.getElementById("iters"),
+			angle = document.getElementById("angle"),
+			velocity = document.getElementById("velocity"),
+			reset = document.getElementById("reset"),
+			download = document.getElementById("download"),
+			verts = initVerts(gl);
+			initAttrib (gl, program);
+		var I = 0;
+		function  setI (I) {
+			setUni(gl, program, "I", I);
+			setUni(gl, sim_P, "I", I);
+			setUni(gl, sim_V, "I", I);
+		}
+		function setR () {
+			canvas.width = width.value;
+			canvas.height = height.value;
+			fbo_V = new Framebuffer(gl, 0, gl.FLOAT, canvas.width, canvas.height);
+			fbo_P = new Framebuffer(gl, 1, gl.FLOAT, canvas.width, canvas.height);
+			fbo_A = new Framebuffer(gl, 2, gl.FLOAT, canvas.width, canvas.height);
+			setUni(gl, program, "R", [canvas.width,canvas.height]);
+			setUni(gl, sim_V, "R", [fbo_V.w, fbo_V.h]);
+			setUni(gl, sim_P, "R", [fbo_P.w, fbo_P.h]);
+			setUni(gl, sim_A, "R", [fbo_A.w, fbo_A.h]);
+		}
+		function setTx () {
+			setUni(gl, program, "V", fbo_V);
+			setUni(gl, sim_V, "V", fbo_P);
+			setUni(gl, sim_P, "V", fbo_V);
+			setUni(gl, sim_P, "T", fbo_A);
+			setUni(gl, sim_A, "V", fbo_V);
+		}
+		function setInputs () {
+			setUni(gl, sim_P, "velocity", Number(velocity.value));
+			setUni(gl, sim_P, "angle", Number(angle.value));
+			setUni(gl, program, "angle", Number(angle.value));
+		}
+		function setMouse (mouse) {
+			setUni(gl, sim_P, "mouse", mouse);
+			setUni(gl, sim_P, "mouse", mouse);
+		}
+		function setUnis () {
+			setR();
+			setI(I=0);
+			setTx();
+			setInputs();
+		}
+		setUnis();
+
+		mouse = [0,0,0,0];
+		function animate () {
+			requestAnimationFrame (animate);
+			setMouse(mouse);
+			for (var i = 0; i < Number(iters.value); i++) {
+				setI(I++);
+				draw(gl, sim_P, fbo_P);
+				draw(gl, sim_V, fbo_V);
+				draw(gl, sim_A, fbo_A);
+			}
+			draw (gl, program, canvas);
+		} animate ();
+		function  getMousePos(canvas, evt) {
+		  var rect = canvas.getBoundingClientRect(), // abs. size of element
+		      scaleX = canvas.width / rect.width,    // relationship bitmap vs. element for X
+		      scaleY = canvas.height / rect.height;  // relationship bitmap vs. element for Y
+
+		  return {
+		    x: (evt.clientX - rect.left) * scaleX,   // scale mouse coordinates after they have
+		    y: (evt.clientY - rect.top) * scaleY     // been adjusted to be relative to element
+		  }
+		}
+		width.onchange = height.onchange = setR;
+		velocity.oninput = angle.oninput = setInputs;
+		reset.onclick = function() {I=0;}
+		function downloadFile(filename, text) {
+		  var element = document.createElement('a');
+		  element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+		  element.setAttribute('download', filename);
+
+		  element.style.display = 'none';
+		  document.body.appendChild(element);
+
+		  element.click();
+
+		  document.body.removeChild(element);
+		}
+		download.onclick = function() {
+			var v = new Float32Array(4*canvas.width*canvas.height),
+				text ="[";
+			fbo_V.route();
+			gl.readPixels(0,0,canvas.width,canvas.height, gl.RGBA, gl.FLOAT, v);
+			var i = 0;
+			for (var y = 0; y < canvas.height; y++) {
+				text += "[";
+				for (var x = 0; x < canvas.width; x++) {
+					text += "["+v[i]+","+v[i+1]+","+v[i+2]+","+v[i+3]+"]";
+					if (x < canvas.width-1) text += ",";
+					i+=4;
+				}
+				text += "]"
+				if (y < canvas.height-1) text += ",";
+			}
+			text+="]";
+			downloadFile ("Fluid_Angle"+angle.value+"_Velocity"+Number(velocity.value*100),text);
+		}
+		canvas.onmousedown = function (e) {
+			var p = getMousePos (canvas, e);
+		    mouse =  [p.x,canvas.height-p.y,p.x,canvas.height-p.y];
+		}
+		canvas.onmousemove = function (e) {
+			var p = getMousePos (canvas, e);
+		    if (mouse[0]>0)
+		    mouse = [p.x,canvas.height-p.y,mouse[0],mouse[1]];
+		}
+		canvas.onmouseout = canvas.onmouseup = function (e) {
+			mouse = [0,0,0,0];
+		}
+	</script>
+</body>
+
+
+<!-- Mirrored from wyattflanders.com/AirFoil/ by HTTrack Website Copier/3.x [XR&CO'2014], Tue, 29 Nov 2022 08:02:55 GMT -->
+</html>
